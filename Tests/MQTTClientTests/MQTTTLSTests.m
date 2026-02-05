@@ -1,0 +1,137 @@
+//
+//  MQTTTLSTests.m
+//  MQTTClient
+//
+//  Created by Christoph Krey on 04.01.21.
+//  Copyright © 2021-2025 Christoph Krey. All rights reserved.
+//
+
+#import <XCTest/XCTest.h>
+#import "MQTTTestHelpers.h"
+#import "MQTTNWTransport.h"
+
+@interface MQTTTLSTests : MQTTTestHelpers
+@property (nonatomic) BOOL connecting;
+@property (nonatomic) BOOL disconnecting;
+@end
+
+@implementation MQTTTLSTests
+
+- (void)setUp {
+    [super setUp];
+    self.connecting = false;
+    self.disconnecting = false;
+}
+
+- (void)tearDown {
+    [super tearDown];
+}
+
+- (void)test_mosquitto_1883 {
+    [self test_mosquitto_any:@"test.mosquitto.org"
+                        port:1883
+                         tls:false
+  allowUntrustedCertificates:false
+                      expect:true];
+}
+
+- (void)test_mosquitto_8883 {
+    // self signed certificate
+    [self test_mosquitto_any:@"test.mosquitto.org"
+                        port:8883
+                         tls:true
+  allowUntrustedCertificates:false
+                      expect:false];
+}
+
+- (void)test_mosquitto_8883_allowUntrusted {
+    // self signed certificate
+    [self test_mosquitto_any:@"test.mosquitto.org"
+                        port:8883
+                         tls:true
+  allowUntrustedCertificates:true
+                      expect:true];
+}
+
+- (void)test_mosquitto_8886 {
+    // letsencrypt certificate
+    [self test_mosquitto_any:@"test.mosquitto.org"
+                        port:8886
+                         tls:true
+  allowUntrustedCertificates:false
+                      expect:true];
+}
+
+- (void)test_mosquitto_any:(NSString *)host
+                      port:(UInt16)port
+                       tls:(BOOL)tls
+allowUntrustedCertificates:(BOOL)allowUntrustedCertificates
+                    expect:(BOOL)expect {
+    MQTTNWTransport *nwTransport = [[MQTTNWTransport alloc] init];
+    nwTransport.host = host;
+    nwTransport.port = port;
+    nwTransport.tls = tls;
+    nwTransport.allowUntrustedCertificates = allowUntrustedCertificates;
+
+    self.session = [[MQTTSession alloc] init];
+    self.session.transport = nwTransport;
+    self.session.protocolLevel = MQTTProtocolVersion50;
+
+    self.session.delegate = self;
+
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
+    self.timedout = FALSE;
+    [self performSelector:@selector(timedout:)
+               withObject:nil
+               afterDelay:10];
+
+    [self.session connectWithConnectHandler:^(NSError *error) {
+        if (error) {
+            MQTTLogError("connectWithConnectHandler %@", error);
+        } else {
+        }
+        self.connecting = true;
+    }];
+
+    while (!self.timedout && !self.connecting) {
+        MQTTLogDebug("waiting for connection");
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1]];
+    }
+
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
+
+    if (expect) {
+        XCTAssert(!self.timedout, @"timeout");
+        XCTAssertEqual(self.event, MQTTSessionEventConnected, @"Not Connected %ld %@", (long)self.event, self.error);
+        
+        self.timedout = FALSE;
+        [self performSelector:@selector(timedout:)
+                   withObject:nil
+                   afterDelay:10];
+        
+        [self.session closeWithReturnCode:MQTTSuccess
+                    sessionExpiryInterval:nil
+                             reasonString:nil
+                           userProperties:nil
+                        disconnectHandler:^(NSError *error) {
+            if (error) {
+                MQTTLogError("closeWithReturnCode %@", error);
+            } else {
+            }
+            self.disconnecting = true;
+        }];
+        
+        while (!self.timedout && !self.disconnecting) {
+            MQTTLogDebug("waiting for disconnect");
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1]];
+        }
+        
+        XCTAssert(!self.timedout, @"timeout");
+    } else {
+        XCTAssert(self.timedout, @"not connected");
+    }
+
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
+}
+
+@end
