@@ -15,7 +15,11 @@
 + (MQTTLog * _Nonnull )sharedInstance;
 @property (nonatomic, nonnull, strong, readonly) os_log_t os_log;
 
+#ifdef DEBUG
 #define MQTTLogDebug(format, ...) os_log_debug(MQTTLog.sharedInstance.os_log, format, ##__VA_ARGS__)
+#else
+#define MQTTLogDebug(format, ...)
+#endif
 #define MQTTLogInfo(format, ...) os_log_info(MQTTLog.sharedInstance.os_log, format, ##__VA_ARGS__)
 #define MQTTLogDefault(format, ...) os_log(MQTTLog.sharedInstance.os_log, format, ##__VA_ARGS__)
 #define MQTTLogError(format, ...) os_log_error(MQTTLog.sharedInstance.os_log, format, ##__VA_ARGS__)
