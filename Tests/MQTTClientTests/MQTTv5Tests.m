@@ -629,4 +629,73 @@
                   userProperties:nil];
 }
 
+- (void)test_defaultReceiveMaximum {
+    if ([self.parameters[@"protocollevel"] integerValue] != MQTTProtocolVersion50) {
+        return;
+    }
+    self.session.clientId = [NSString stringWithFormat:@"%s", __FUNCTION__];
+    [self connect];
+    XCTAssertEqual(self.event, MQTTSessionEventConnected, @"Not Connected %ld %@", (long)self.event, self.error);
+
+    MQTTLogDefault("Client Receive Maximum: %@", self.session.receiveMaximum);
+    MQTTLogDefault("Broker Receive Maximum: %@", self.session.brokerReceiveMaximum);
+    UInt16 clientReceiveMaximum = 65535;
+    UInt16 brokerReceiveMaximum = 65535;
+    if (self.session.receiveMaximum) {
+        clientReceiveMaximum = self.session.receiveMaximum.unsignedShortValue;
+    }
+    if (self.session.brokerReceiveMaximum) {
+        brokerReceiveMaximum = self.session.brokerReceiveMaximum.unsignedShortValue;
+    }
+    XCTAssertEqual(clientReceiveMaximum, 65535, @"clientReceiveMaximum %u", clientReceiveMaximum);
+
+    __block uint16 inflight = 0;
+    for (uint16 i = 1; i < 1000; i++) {
+        uint16 mid =  [self.session publishDataV5:[[NSString stringWithFormat:@"Receive Maximum %u/%u",
+                                                    i, clientReceiveMaximum] dataUsingEncoding:NSUTF8StringEncoding]
+                                          onTopic:TOPIC
+                                           retain:false
+                                              qos:MQTTQosLevelExactlyOnce
+                           payloadFormatIndicator:nil
+                            messageExpiryInterval:nil
+                                       topicAlias:nil
+                                    responseTopic:nil
+                                  correlationData:nil
+                                   userProperties:nil
+                                      contentType:nil
+                                   publishHandler:
+                       ^(NSError * _Nullable error,
+                         NSString * _Nullable reasonString,
+                         NSArray<NSDictionary<NSString *,NSString *> *> * _Nullable userProperties,
+                         NSNumber * _Nullable reasonCode,
+                         UInt16 msgID) {
+            MQTTLogDefault("Broker Receive Maximum sent: %u %@ %@",
+                           msgID,
+                           reasonCode,
+                           error);
+            inflight--;
+        }];
+        MQTTLogDefault("Broker Receive Maximum published: %u", mid);
+        inflight++;
+    }
+    
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
+    self.timedout = FALSE;
+    [self performSelector:@selector(timedout:)
+               withObject:nil
+               afterDelay:30];
+
+    while (!self.timedout && inflight > 0) {
+        MQTTLogDefault("Broker Receive Maximum waiting: %u", inflight);
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1]];
+    }
+
+    XCTAssert(!self.timedout,@"Timeout");
+
+    [self shutdownWithReturnCode:MQTTSuccess
+           sessionExpiryInterval:nil
+                    reasonString:nil
+                  userProperties:nil];
+}
+
 @end

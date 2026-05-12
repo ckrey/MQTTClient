@@ -719,5 +719,5 @@ messageExpiryInterval:(NSNumber *  _Nullable)messageExpiryInterval
  *  @param message the message to send
  *  @return if the message was sent
  */
-- (BOOL)encode:(MQTTMessage * _Nonnull)message;
+- (BOOL)encode:(MQTTMessage * _Nullable)message;
 @end
